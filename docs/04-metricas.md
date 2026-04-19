@@ -1,71 +1,68 @@
-# Avaliação e Métricas
+import json
+import pandas as pd
+import requests
+import streamlit as st
 
-## Como Avaliar seu Agente
+# ============ CONFIGURAÇÃO ============
+OLLAMA_URL = "http://localhost:11434/api/generate"
+MODELO = "gpt-oss"
 
-A avaliação pode ser feita de duas formas complementares:
+# ============ CARREGAR DADOS ============
+perfil = json.load(open('./data/perfil_investidor.json'))
+transacoes = pd.read_csv('./data/transacoes.csv')
+historico = pd.read_csv('./data/historico_atendimento.csv')
+produtos = json.load(open('./data/produtos_financeiros.json'))
 
-1. **Testes estruturados:** Você define perguntas e respostas esperadas;
-2. **Feedback real:** Pessoas testam o agente e dão notas.
+# ============ MONTAR CONTEXTO ============
+contexto = f"""
+CLIENTE: {perfil['nome']}, {perfil['idade']} anos, perfil {perfil['perfil_investidor']}
+OBJETIVO: {perfil['objetivo_principal']}
+PATRIMÔNIO: R$ {perfil['patrimonio_total']} | RESERVA: R$ {perfil['reserva_emergencia_atual']}
 
----
+TRANSAÇÕES RECENTES:
+{transacoes.to_string(index=False)}
 
-## Métricas de Qualidade
+ATENDIMENTOS ANTERIORES:
+{historico.to_string(index=False)}
 
-| Métrica | O que avalia | Exemplo de teste |
-|---------|--------------|------------------|
-| **Assertividade** | O agente respondeu o que foi perguntado? | Perguntar o saldo e receber o valor correto |
-| **Segurança** | O agente evitou inventar informações? | Perguntar algo fora do contexto e ele admitir que não sabe |
-| **Coerência** | A resposta faz sentido para o perfil do cliente? | Sugerir investimento conservador para cliente conservador |
+PRODUTOS DISPONÍVEIS:
+{json.dumps(produtos, indent=2, ensure_ascii=False)}
+"""
 
-> [!TIP]
-> Peça para 3-5 pessoas (amigos, família, colegas) testarem seu agente e avaliarem cada métrica com notas de 1 a 5. Isso torna suas métricas mais confiáveis! Caso use os arquivos da pasta `data`, lembre-se de contextualizar os participantes sobre o **cliente fictício** representado nesses dados.
+# ============ SYSTEM PROMPT ============
+SYSTEM_PROMPT = """Você é o Edu, um educador financeiro amigável e didático.
 
----
+OBJETIVO:
+Ensinar conceitos de finanças pessoais de forma simples, usando os dados do cliente como exemplos práticos.
 
-## Exemplos de Cenários de Teste
+REGRAS:
+- NUNCA recomende investimentos específicos, apenas explique como funcionam;
+- JAMAIS responda a perguntas fora do tema ensino de finanças pessoais. 
+  Quando ocorrer, responda lembrando o seu papel de educador financeiro;
+- Use os dados fornecidos para dar exemplos personalizados;
+- Linguagem simples, como se explicasse para um amigo;
+- Se não souber algo, admita: "Não tenho essa informação, mas posso explicar...";
+- Sempre pergunte se o cliente entendeu;
+- Responda de forma sucinta e direta, com no máximo 3 parágrafos.
+"""
 
-Crie testes simples para validar seu agente:
+# ============ CHAMAR OLLAMA ============
+def perguntar(msg):
+    prompt = f"""
+    {SYSTEM_PROMPT}
 
-### Teste 1: Consulta de gastos
-- **Pergunta:** "Quanto gastei com alimentação?"
-- **Resposta esperada:** Valor baseado no `transacoes.csv`
-- **Resultado:** [ ] Correto  [ ] Incorreto
+    CONTEXTO DO CLIENTE:
+    {contexto}
 
-### Teste 2: Recomendação de produto
-- **Pergunta:** "Qual investimento você recomenda para mim?"
-- **Resposta esperada:** Produto compatível com o perfil do cliente
-- **Resultado:** [ ] Correto  [ ] Incorreto
+    Pergunta: {msg}"""
 
-### Teste 3: Pergunta fora do escopo
-- **Pergunta:** "Qual a previsão do tempo?"
-- **Resposta esperada:** Agente informa que só trata de finanças
-- **Resultado:** [ ] Correto  [ ] Incorreto
+    r = requests.post(OLLAMA_URL, json={"model": MODELO, "prompt": prompt, "stream": False})
+    return r.json()['response']
 
-### Teste 4: Informação inexistente
-- **Pergunta:** "Quanto rende o produto XYZ?"
-- **Resposta esperada:** Agente admite não ter essa informação
-- **Resultado:** [ ] Correto  [ ] Incorreto
+# ============ INTERFACE ============
+st.title("🎓 Edu, o Educador Financeiro")
 
----
-
-## Resultados
-
-Após os testes, registre suas conclusões:
-
-**O que funcionou bem:**
-- [Liste aqui]
-
-**O que pode melhorar:**
-- [Liste aqui]
-
----
-
-## Métricas Avançadas (Opcional)
-
-Para quem quer explorar mais, algumas métricas técnicas de observabilidade também podem fazer parte da sua solução, como:
-
-- Latência e tempo de resposta;
-- Consumo de tokens e custos;
-- Logs e taxa de erros.
-
-Ferramentas especializadas em LLMs, como [LangWatch](https://langwatch.ai/) e [LangFuse](https://langfuse.com/), são exemplos que podem ajudar nesse monitoramento. Entretanto, fique à vontade para usar qualquer outra que você já conheça!
+if pergunta := st.chat_input("Sua dúvida sobre finanças..."):
+    st.chat_message("user").write(pergunta)
+    with st.spinner("..."):
+        st.chat_message("assistant").write(perguntar(pergunta))
