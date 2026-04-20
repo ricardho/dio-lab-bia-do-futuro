@@ -1,4 +1,4 @@
-# 🎓 EDU — Educador Financeiro Inteligente
+# 🎓 EDU — Educador Financeiro Inteligente - Usando Notebooklm
 
 > Agente de IA Generativa que ensina conceitos de finanças pessoais de forma simples e personalizada, usando os próprios dados do cliente como exemplos práticos.
 
