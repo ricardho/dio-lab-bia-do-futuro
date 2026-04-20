@@ -1,69 +1,52 @@
-import json
-import pandas as pd
-import requests
+# src/app.py
 import streamlit as st
+from agente import perguntar_edu
 
-# ============ CONFIGURAÇÃO ============
-OLLAMA_URL = "http://localhost:11434/api/generate"
-MODELO = "gpt-oss"
+st.set_page_config(
+    page_title="EDU — Educador Financeiro",
+    page_icon="📚",
+    layout="centered"
+)
 
-# ============ CARREGAR DADOS ============
-perfil = json.load(open('./data/perfil_investidor.json'))
-transacoes = pd.read_csv('./data/transacoes.csv')
-historico = pd.read_csv('./data/historico_atendimento.csv')
-produtos = json.load(open('./data/produtos_financeiros.json'))
+st.title("📚 EDU — Seu Educador Financeiro")
+st.caption("Tire dúvidas sobre suas finanças com base nos seus dados reais.")
 
-# ============ MONTAR CONTEXTO ============
-contexto = f"""
-CLIENTE: {perfil['nome']}, {perfil['idade']} anos, perfil {perfil['perfil_investidor']}
-OBJETIVO: {perfil['objetivo_principal']}
-PATRIMÔNIO: R$ {perfil['patrimonio_total']} | RESERVA: R$ {perfil['reserva_emergencia_atual']}
+# Inicializa o histórico de conversa
+if "historico" not in st.session_state:
+    st.session_state.historico = []
 
-TRANSAÇÕES RECENTES:
-{transacoes.to_string(index=False)}
+# Botão para limpar conversa
+if st.button("🗑️ Limpar conversa"):
+    st.session_state.historico = []
+    st.rerun()
 
-ATENDIMENTOS ANTERIORES:
-{historico.to_string(index=False)}
+# Exibe as mensagens anteriores
+for msg in st.session_state.historico:
+    with st.chat_message(msg["role"]):
+        st.write(msg["content"])
 
-PRODUTOS DISPONÍVEIS:
-{json.dumps(produtos, indent=2, ensure_ascii=False)}
-"""
+# Campo de input do usuário
+pergunta = st.chat_input("Digite sua pergunta financeira...")
 
-# ============ SYSTEM PROMPT ============
-SYSTEM_PROMPT = """Você é o Edu, um educador financeiro amigável e didático.
+if pergunta:
+    # Mostra a mensagem do usuário
+    with st.chat_message("user"):
+        st.write(pergunta)
 
-OBJETIVO:
-Ensinar conceitos de finanças pessoais de forma simples, usando os dados do cliente como exemplos práticos.
+    st.session_state.historico.append({
+        "role": "user",
+        "content": pergunta
+    })
 
-REGRAS:
-- NUNCA recomende investimentos específicos, apenas explique como funcionam;
-- JAMAIS responda a perguntas fora do tema ensino de finanças pessoais. 
-  Quando ocorrer, responda lembrando o seu papel de educador financeiro;
-- Use os dados fornecidos para dar exemplos personalizados;
-- Linguagem simples, como se explicasse para um amigo;
-- Se não souber algo, admita: "Não tenho essa informação, mas posso explicar...";
-- Sempre pergunte se o cliente entendeu;
-- Responda de forma sucinta e direta, com no máximo 3 parágrafos.
-"""
-
-# ============ CHAMAR OLLAMA ============
-def perguntar(msg):
-    prompt = f"""
-    {SYSTEM_PROMPT}
-
-    CONTEXTO DO CLIENTE:
-    {contexto}
-
-    Pergunta: {msg}"""
-
-    r = requests.post(OLLAMA_URL, json={"model": MODELO, "prompt": prompt, "stream": False})
-    return r.json()['response']
-
-# ============ INTERFACE ============
-st.title("🎓 Edu, o Educador Financeiro")
-
-if pergunta := st.chat_input("Sua dúvida sobre finanças..."):
-    st.chat_message("user").write(pergunta)
-    with st.spinner("..."):
-        st.chat_message("assistant").write(perguntar(pergunta))
-
+    # Gera e mostra a resposta do EDU
+    with st.chat_message("assistant"):
+        with st.spinner("EDU está consultando sua base de dados..."):
+            try:
+                resposta = perguntar_edu(pergunta, st.session_state.historico)
+                st.write(resposta)
+                st.session_state.historico.append({
+                    "role": "assistant",
+                    "content": resposta
+                })
+            except Exception as e:
+                st.error(f"Erro ao consultar o EDU: {e}")
